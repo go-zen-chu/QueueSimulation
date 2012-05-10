@@ -32,6 +32,7 @@ public class Server {
 	public void endServingPacket(double endServedTime) {
 		mServingPacket.mServedTime = endServedTime;
 		mServingPacket.calcWaitedTime();
+		mServingPacket.calcServingTime();
 		Main.mServedPackets.add(mServingPacket);
 	}
 	

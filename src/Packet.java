@@ -7,9 +7,8 @@ public class Packet {
 	public double mServedTime = -1;
 	public boolean mIsLost = false;
 	public boolean mIsMeasured = false;
-	
-	private double mWaitedTime = -1;
-	private double mServingTime = -1;
+	public double mWaitedTime = -1;
+	public double mServingTime = -1;
 	
 	public Packet(int packetID, double enqueuedTime) {
 		mPacketID = packetID;
@@ -20,8 +19,13 @@ public class Packet {
 		mServedServerID = server.mServerID;
 	}
 	
+	/**パケットが呼損した*/
 	public void loseThisPacket() {
 		mIsLost = true;
+		mDequeuedTime = mEnqueuedTime;
+		mServedTime = mEnqueuedTime;
+		calcWaitedTime();
+		calcServingTime();
 	}
 	
 	public void measureThisPacket() {
