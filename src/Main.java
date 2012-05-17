@@ -14,6 +14,8 @@ import javax.swing.JLabel;
 
 public class Main {
 
+	/**ファイルん出力先*/
+	public static final String SAVE_PATH = "/Users/masudaakira/Desktop/";
 	/**改行コード*/
 	public static final String NEWLINE = System.getProperty("line.separator");
 	/**到着率*/
@@ -30,17 +32,22 @@ public class Main {
 	private static final double SIMULATION_END_TIME = 5000.0;
 	/**サーバー数*/
 	private static final int NUMBER_OF_SERVER = 10;
-	
+	/**サービス時間固定（M/G/c/K のシミュレーションにするかどうか） false..off, true..on*/
+	private static final boolean SERVICE_TIME_FIXED = false;
+	/**優先パケット（待ち行列の先頭に一気に進める）を作るかどうか false..off, true..on*/
+	private static final boolean PRIORITY_PACKET = false;
+	/**優先パケットが発生する確率 0.0 - 1.0 の間で設定*/
+	private static final double PRIORITY_PACKET_INCIDENCE_RATE = 0.1;
 
-	private static Random random = new Random(System.currentTimeMillis());
-	public static ArrayList<Event> mEventList;
+	private static Random mRandom = new Random(System.currentTimeMillis());
+	/**固定されたサービス時間*/
+	private static double mFixedServiceTime = -1;
+	
+	private static ArrayList<Event> mEventList;
 	private static ArrayList<Packet> mPacketQueue;
-	public static ArrayList<Packet> mServedPackets;
+	private static ArrayList<Packet> mServedPackets;
 	private static ArrayList<Server> mServerList;
 	
-	private static int mAveragePacketsNum = 0;
-	private static double mAverageSystemInTime = 0;
-	private static double mPacketLostRate = 0;
 	
 	public static void main(String[] args) {
 		// システムデータ保存用のstring
@@ -50,7 +57,10 @@ public class Main {
 		double previousEventTime = 0, currentEventTime = 0;
 		int packetID = 0;
 		int systemPacketsNumber = 0;
-		boolean mIsStatisticStarted = false;
+		boolean isStatisticStarted = false;
+		int averagePacketsNum = 0;
+		double averageSystemInTime = 0;
+		double packetLostRate = 0;
 		mEventList = new ArrayList<Event>(100);
 		mPacketQueue = new ArrayList<Packet>(K);
 		mServedPackets = new ArrayList<Packet>(1000);
@@ -83,9 +93,9 @@ public class Main {
 				// 新しく到着したパケットを生成
 				Packet newPacket = new Packet(packetID, currentEventTime);
 				systemPacketsNumber = getSystemPacketsNumber();
-				if(mIsStatisticStarted){
+				if(isStatisticStarted){
 					// 系内パケット数 * そのパケット数だった時間を追加
-					mAveragePacketsNum += systemPacketsNumber * (currentEventTime - previousEventTime);
+					averagePacketsNum += systemPacketsNumber * (currentEventTime - previousEventTime);
 					// このパケットを統計の考慮に入れる
 					newPacket.measureThisPacket();
 				}
@@ -111,9 +121,9 @@ public class Main {
 				
 			case Event.TYPE_SERVED:
 				systemPacketsNumber = getSystemPacketsNumber();
-				if(mIsStatisticStarted){
+				if(isStatisticStarted){
 					// 系内パケット数 * そのパケット数だった時間を追加
-					mAveragePacketsNum += systemPacketsNumber * (currentEventTime - previousEventTime);
+					averagePacketsNum += systemPacketsNumber * (currentEventTime - previousEventTime);
 				}
 				// サービスを終了するサーバを取り出す
 				Server dequeuingServer = mServerList.get(newEvent.mServerID);
@@ -126,13 +136,13 @@ public class Main {
 				break;
 				
 			case Event.TYPE_START_STATISTIC:
-				mIsStatisticStarted = true;
+				isStatisticStarted = true;
 				break;
 				
 			case Event.TYPE_END_SIMULATION:
 				systemPacketsNumber = getSystemPacketsNumber();
-				mAveragePacketsNum += systemPacketsNumber * (currentEventTime - previousEventTime);
-				mIsStatisticStarted = false;
+				averagePacketsNum += systemPacketsNumber * (currentEventTime - previousEventTime);
+				isStatisticStarted = false;
 				break;
 			}
 			Collections.sort(mEventList, new TimeComparator());
@@ -140,12 +150,13 @@ public class Main {
 			systemDataString += newEvent.mTime + "," + newEvent.mType + "," 
 									+ systemPacketsNumber + "," + packetQueueSize + "," 
 									+ (systemPacketsNumber - packetQueueSize) + ","
-									+ String.valueOf(mIsStatisticStarted) + NEWLINE;
+									+ String.valueOf(isStatisticStarted) + NEWLINE;
 		}
-		getStatistic();
-		// TODO
-		exportAsCsvfile("/Users/masudaakira/Desktop/systemData.csv",systemDataString);
-		showResultDialog();
+		// 引数はプリミティブ型なので値渡し
+		getStatistic(averagePacketsNum, averageSystemInTime, packetLostRate);
+		exportAsCsvfile( SAVE_PATH + "systemData.csv",systemDataString);
+		// 引数はプリミティブ型なので値渡し
+		showResultDialog(averagePacketsNum, averageSystemInTime, packetLostRate);
 	}
 
 	/**系内パケット数を取得する*/
@@ -172,22 +183,29 @@ public class Main {
 			return Server.ALL_SERVING;
 		}else{
 			// 空のサーバー数までで乱数を生成、そこから空いているサーバーのIDを取得
-			return emptyServerIDs.get(random.nextInt(emptyServerIDs.size()));
+			return emptyServerIDs.get(mRandom.nextInt(emptyServerIDs.size()));
 		}
 	}
-	
+	//====================================================//
 	/**実験時間内で到着時間用ポアソン時間を作る*/
 	public static double makeArrivalPoisson() {
-		return -Math.log( 1 - random.nextDouble()) / RAMDA;
+		return -Math.log( 1 - mRandom.nextDouble()) / RAMDA;
 	}
 	/**実験時間内でサービス時間用ポアソン時間を作る*/
 	public static double makeServicePoisson() {
-		return -Math.log( 1 - random.nextDouble()) / MU;
+		if(SERVICE_TIME_FIXED){
+			if(mFixedServiceTime < 0){
+				mFixedServiceTime = -Math.log( 1 - mRandom.nextDouble()) / MU;
+			}
+			return mFixedServiceTime;
+		}else{
+			return -Math.log( 1 - mRandom.nextDouble()) / MU;
+		}
 	}
 	
 	//====================================================//
 	/**統計結果を出す*/
-	public static void getStatistic() {
+	public static void getStatistic(int averagePacketsNum,double averageSystemInTime ,double packetLostRate) {
 		int packetCount = 0;
 		int lostCount = 0;
 		String packetDataString = "パケットID,呼損したか,到着時刻,サービス開始時刻,"
@@ -201,14 +219,13 @@ public class Main {
 						+ p.mServedTime + "," + p.mWaitedTime + "," + p.mServingTime + ","
 						+ p.mServedServerID + NEWLINE;
 				// システム滞在時間の全パケット合計を求める
-				mAverageSystemInTime += (p.mServedTime - p.mEnqueuedTime);
+				averageSystemInTime += (p.mServedTime - p.mEnqueuedTime);
 			}
 		}
-		//TODO csv形式で全てのデータを表示させたい
-		exportAsCsvfile("/Users/masudaakira/Desktop/packetData.csv",packetDataString);
-		mAveragePacketsNum /= (STAT_END_TIME - STAT_START_TIME);
-		mAverageSystemInTime /= (packetCount - lostCount);
-		mPacketLostRate = ((double)lostCount)/ packetCount;
+		exportAsCsvfile( SAVE_PATH + "packetData.csv",packetDataString);
+		averagePacketsNum /= (STAT_END_TIME - STAT_START_TIME);
+		averageSystemInTime /= (packetCount - lostCount);
+		packetLostRate = ((double)lostCount)/ packetCount;
 	}
 	
 	/**String型をcsvファイルとして指定の場所に保存する*/
@@ -227,15 +244,16 @@ public class Main {
 	
 	//====================================================//
 	/**結果表示ダイアログ*/
-	public static void showResultDialog() {
+	public static void showResultDialog(int averagePacketsNum, double averageSystemInTime,
+													double packetLostRate) {
 		JFrame selectDialog = new JFrame("実行の結果");
 		selectDialog.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		selectDialog.setSize(400, 400);
 		selectDialog.setLayout(new GridLayout(1,1));
 		
-		String viewStr = "<html> 平均系内パケット数::" + mAveragePacketsNum + "<br><br>"
-							+ "平均システム滞在時間::" + mAverageSystemInTime + "<br><br>"
-							+ "パケット棄却率::" + mPacketLostRate;
+		String viewStr = "<html> 平均系内パケット数::" + averagePacketsNum + "<br><br>"
+							+ "平均システム滞在時間::" + averageSystemInTime + "<br><br>"
+							+ "パケット棄却率::" + packetLostRate;
 		JLabel nodeLabel = new JLabel(viewStr);
 		selectDialog.add(nodeLabel);
 		selectDialog.setVisible(true);
