@@ -3,13 +3,17 @@ public class Packet {
 	public int mPacketID = -1;
 	public int mServedServerID = -1;
 	public double mEnqueuedTime = -1;
+	public double mWaitedTime = -1;
 	public double mDequeuedTime = -1;
 	public double mServedTime = -1;
-	public boolean mIsLost = false;
-	public boolean mIsMeasured = false;
-	public double mWaitedTime = -1;
 	public double mServingTime = -1;
 	
+	public boolean mIsLost = false;
+	public boolean mIsMeasured = false;
+	public boolean mIsPriorityPacket = false;
+	
+	
+	/**コンストラクタ*/
 	public Packet(int packetID, double enqueuedTime) {
 		mPacketID = packetID;
 		mEnqueuedTime = enqueuedTime;
@@ -30,6 +34,10 @@ public class Packet {
 	
 	public void measureThisPacket() {
 		mIsMeasured = true;
+	}
+	
+	public void givePriorityToThisPacket() {
+		mIsPriorityPacket = true;
 	}
 	
 	public void calcWaitedTime() {

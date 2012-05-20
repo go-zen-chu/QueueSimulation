@@ -3,8 +3,7 @@ public class Server {
 
 	public static final int MODE_EMPTY = 0;
 	public static final int MODE_SERVING = 1;
-	
-	public static final int ALL_SERVING = -1;
+	public static final int ALL_SERVING = 10;
 	
 	public int mServerID = -1;
 	public int mMode = -1;
@@ -23,8 +22,8 @@ public class Server {
 		mServingPacket = packet;
 		mMode = MODE_SERVING;
 		// イベントの追加
-		Main.mEventList.add(
-				new Event(Event.TYPE_SERVED,
+		Main.mEventQueue.add(
+				new Event(Event.TYPE_PACKET_SERVED,
 						packet.mDequeuedTime + Main.makeServicePoisson(),
 						mServerID));
 	}
